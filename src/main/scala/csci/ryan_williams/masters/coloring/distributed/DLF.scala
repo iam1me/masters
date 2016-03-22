@@ -1,4 +1,4 @@
-package csci.ryan_williams.masters.graph.coloring.distributed
+package csci.ryan_williams.masters.coloring.distributed
 
 import scala.reflect._
 import scala.language._

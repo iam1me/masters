@@ -1,7 +1,18 @@
 package csci.ryan_williams.masters
 
 import csci.ryan_williams.masters._
-import csci.ryan_williams.masters.graph.coloring._
+import csci.ryan_williams.masters.coloring._
+import csci.ryan_williams.masters.parsing._
+
+import java.io._;
+
+import scala.Console._;
+import scala.util._;
+import scala.text._;
+
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.GraphGenerators
@@ -13,10 +24,45 @@ import org.apache.spark.rdd.RDD
 object App {
   def foo(x : Array[String]) = x.foldLeft("")((a,b) => a + b)
   
-  def main(args : Array[String]) {
-    println( "Hello World!" )
-    println("!!!")
-    println("concat arguments = " + foo(args))
+  
+  def main(input: InputStream, output: OutputStream) {    
+
+    var inputReader = new java.io.BufferedReader(
+        new java.io.InputStreamReader(input));
+    
+    var inputBuilder = new StringBuilder();
+    
+    
+    var bufferSize = 1024;
+    var buffer = new Array[Char](bufferSize);
+    var offset = 0;
+    
+    var readSize = -1;
+    while(inputReader.ready())
+    {
+      readSize =  inputReader.read(buffer, offset, bufferSize);
+      if(readSize != -1)
+      {
+      
+        inputBuilder.appendAll(buffer, 0,readSize);
+        offset += readSize;
+      }
+      else{
+        println("End of InputReader Detected");
+      }
+    }
+    
+    var inputString = inputBuilder.result();
+    
+    //println("Input Stream Completed. Here are the contents: ");
+    //println(inputString);    
+    println("\n*** END OF INPUT STREAM CONTENTS ***");
+    
+    println("parsing input json...");
+    new GraphParser[Int,Int]().parse(inputString);
+    //var parsedJson = parse(inputString);        
+    //println(compact(render(parsedJson)));    
+    //println("");
     
     println("creating spark conference...")
     
@@ -111,26 +157,13 @@ object App {
     avgAgeOfOlderFollowers.collect.foreach(println(_))
   }
 
-  @SerialVersionUID(42L)
-  class ColorableVertex 
-    extends Colorable with Serializable
-  {
-    private var __color: Int = -1
-    override def color = __color
-    override def color_(c: Int) = { __color = c }
-    
-    private var __val: Double = 0
-    def value = __val
-    def value_(v: Double) = { __val = v }
-  }
-
   def triangle_graph_coloring_LF(sc: SparkContext)
   {
     println("\n\ntriagle_graph_coloring_LF")
-    def genV(): ColorableVertex = { new ColorableVertex() }
+    def genV():Int = { 0 }
     
     // Create an RDD for the vertices
-    val vertices: RDD[(VertexId, ColorableVertex)] =
+    val vertices: RDD[(VertexId, Int)] =
       sc.parallelize(Array(
           (0L, genV()), (1L, genV()),
           (2L, genV())
@@ -141,27 +174,23 @@ object App {
     // Create an RDD for edges
     val edges: RDD[Edge[Int]] =
       sc.parallelize(Array(
-                           Edge(0L, 1L, genE()), Edge(0L, 2L, genE())
+                           Edge(0L, 2L, genE()), Edge(1L, 2L, genE())
                            //Edge(1L, 2L, genE())
                            ))
                        
     // construct Graph
-    var graph = Graph(vertices, edges)
-    
-    println("Coloring before applying LF Algorithm: ")
-    vertices.foreach(x => println(x._1 + " => " + x._2.color))    
+    var graph = Graph[Int,Int](vertices, edges)
     
     // construct LF Greedy Graph Coloring Algorithm Instance
-    var alg = new LF()
+    var alg = new IDO()
     
     // apply coloring algorithm
-    var colored_graph = alg.Color(graph)
+    var coloring = alg.apply(graph)
     
-    println("\nColoring after applying LF Algorithm: ")
-    //vertices.foreach(x => println(x._1 + " => " + x._2.color))
-    colored_graph.vertices.foreach(x =>
-      println(x._1 + " => " + x._2)
-      )
+    println("\nColoring after applying " + alg.getClass().getName())
+    coloring.foreach(x => {
+      println("\t" + x._1 + ": " + x._2);      
+    });
   }  
   
 
