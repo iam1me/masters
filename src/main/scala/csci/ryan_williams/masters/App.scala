@@ -10,8 +10,10 @@ import scala.Console._;
 import scala.util._;
 import scala.text._;
 
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import org.json4s._;
+import org.json4s.jackson._;
+import org.json4s.jackson.JsonMethods._;
+import org.json4s.jackson.Serialization._;
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
@@ -24,8 +26,20 @@ import org.apache.spark.rdd.RDD
 object App {
   def foo(x : Array[String]) = x.foldLeft("")((a,b) => a + b)
   
+  implicit val formats = Serialization.formats(NoTypeHints)
   
-  def main(input: InputStream, output: OutputStream) {    
+  def main(input: InputStream, output: OutputStream) 
+  {    
+    
+    println("creating spark conference...")
+    
+    var conf = new SparkConf()
+      .setAppName("My Spark Test")
+      .setMaster("local[*]")
+      
+    var sc = new SparkContext(conf)   
+    
+    println("spark context created successfully!")
 
     var inputReader = new java.io.BufferedReader(
         new java.io.InputStreamReader(input));
@@ -58,27 +72,38 @@ object App {
     //println(inputString);    
     println("\n*** END OF INPUT STREAM CONTENTS ***");
     
+    println(compact(render(parse(inputString))));
+    
     println("parsing input json...");
-    new GraphParser[Int,Int]().parse(inputString);
-    //var parsedJson = parse(inputString);        
-    //println(compact(render(parsedJson)));    
-    //println("");
+    var inputGraph = GraphParser.parse(sc, inputString);
     
-    println("creating spark conference...")
+    var results = new LDO().apply(inputGraph);
     
-    var conf = new SparkConf()
-      .setAppName("My Spark Test")
-      .setMaster("local[*]")
-      
-    var sc = new SparkContext(conf)   
+    //println("\nColoring after applying " + alg.getClass().getName())
+    results.foreach(x => {
+      println("\t" + x._1 + ": " + x._2);      
+    });
     
-    println("spark context created successfully!")
+    println("COLORING RESULT:");
+    var serResults = write("vertices" ->
+          results.map(x => 
+            new JObject(
+              new JField("id", new JInt(x._1))
+              :: new JField("color", new JInt(x._2))
+              :: Nil
+            )
+          )     
+    )
+        
+        
+    output.write(serResults.getBytes());
+
       
     //pi_example(sc, 10)
     //graph_example01(sc)
     //graph_example02(sc)
     
-    triangle_graph_coloring_LF(sc)
+    //triangle_graph_coloring_LF(sc)
     
   }
   
