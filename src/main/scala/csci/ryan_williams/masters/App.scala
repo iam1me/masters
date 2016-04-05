@@ -2,6 +2,7 @@ package csci.ryan_williams.masters
 
 import csci.ryan_williams.masters._
 import csci.ryan_williams.masters.coloring._
+import csci.ryan_williams.masters.coloring.distributed._;
 import csci.ryan_williams.masters.parsing._
 
 import java.io._;
@@ -35,6 +36,9 @@ object App {
     
     var conf = new SparkConf()
       .setAppName("My Spark Test")
+      //.setMaster("52.32.127.248")
+      .setSparkHome(System.getenv("SPARK_HOME"))
+      //.setJars(Seq(""))
       .setMaster("local[*]")
       
     var sc = new SparkContext(conf)   
@@ -77,6 +81,10 @@ object App {
     println("parsing input json...");
     var inputGraph = GraphParser.parse(sc, inputString);
     
+    
+    LDPO.apply(sc, inputGraph);
+    
+    /*
     var results = new LDO().apply(inputGraph);
     
     //println("\nColoring after applying " + alg.getClass().getName())
@@ -97,7 +105,7 @@ object App {
         
         
     output.write(serResults.getBytes());
-
+		*/
       
     //pi_example(sc, 10)
     //graph_example01(sc)
