@@ -32,6 +32,11 @@ import scala.reflect._
 
 object LDPO 
 {      
+  /**	NeighborOrientation
+   * 	an 'enum' used to indicate the relationship between two adjacent nodes.
+   * 	The algorithm will determine this relationship based first upon the degree of the nodes (larger degree first)
+   * 	and then based upon priority to break any ties (priority values must be locally unique for this to work)
+   */
   object NeighborOrientation
   {
     def UNKNOWN = 0;
@@ -39,94 +44,102 @@ object LDPO
     def CHILD = 2;
   }
   
-  class VertexColoringState(vid: VertexId, vertexPriority: Int, vertexNeighborIds: Array[VertexId])
-    extends Serializable
+  /**	ColoringState
+   * 	holds an individual vertice's information between rounds
+   * 	Immutable; a new one must be constructed between rounds for the pregel method to work properly
+   */
+  case class ColoringState(val id: VertexId,val priority: Long, val neighborIds: Array[VertexId], val color: Int, 
+                            val neighborOrientations: Array[(VertexId, Int)], val neighborColors: Array[(VertexId, Int)],
+                            val pathLength: Int) extends Serializable;
+  
+  /**	Message
+   * 	each round, each edge-triplet is evaluated so that messages can be sent between
+   * 	neighboring nodes. In this algorithm, messages are sent to keep neighbors informed of a vertices state.
+   * 	The first message sent is basic orientation information. Based upon this information parent/child relationships
+   * 	are established between neighboring nodes. Then any node with no parents can color themselves and send a ColorMessage
+   * 	to their children. This casscades through the graph until all nodes are colored.
+   */
+  sealed abstract class Message extends Serializable;
+  case class Initialize() extends Message;
+  case class OrientationInfoMessage(id: VertexId, degree: Int, priority: Long) extends Message;
+  case class ColorMessage(id: VertexId, color: Int, pathLength: Int) extends Message;
+
+  
+  /**	MessageProcessor
+   * 	Takes an immutable ColoringState as input. Any number of Messages maybe passed to it
+   * 	to for processing. Then the build() command can be called to retrieve a new ColoringState.
+   */
+  class MessageProcessor(val prevState: ColoringState)
   {
-    private var _id:VertexId = vid;
-    private var _degree:Int = vertexNeighborIds.length;
-    private var _priority:Int = vertexPriority;
-    private var _neighborIds:Array[VertexId] = vertexNeighborIds;
-    private var _neighborOrientation = new HashMap[VertexId,Int](); //Array[(VertexId, Int)] = vertexNeighborIds.map(x => (x,NeighborOrientation.UNKNOWN));
-    private var _neighborColor = new HashMap[VertexId, Int]();
-    private var _color: Int = -1;
+    private val _degree = prevState.neighborIds.length;
+    private var _color: Int = prevState.color;
+    private var _maxPathLength:Int = prevState.pathLength;
     
-    var round_count:Int = 0;
-    
-    def id:VertexId = { return this._id; }
-    def degree:Int = { return this._degree; }
-    def priority:Int = { return this._priority; }        
-    def neighborIds:Array[VertexId] = { return this._neighborIds; }
-    
-    def color: Int = { return this._color; }
-    //def color_(value: Int) = { this._color = value; }
-   
-    
-    def getNeighborOrientation(neighborId:VertexId):Option[Int]=
-    {
-      this._neighborOrientation.get(neighborId)      
-    }
-    
-    def getNeighborOrientations(): Array[(VertexId, Option[Int])]=
-    {
-      this._neighborIds.map(x => (x, getNeighborOrientation(x)))
-    }
-    
-    def getNeighborColor(neighborId:VertexId):Option[Int]=
-    {
-      this._neighborColor.get(neighborId)   
-    }
-    
-    def getNeighborColors(): Array[(VertexId, Option[Int])] =
-    {
-      this._neighborIds.map(x => (x, getNeighborColor(x)))
-    }
-    
-    def isReadyToColor():Boolean = 
-    {
-      println("isReadyToColor() - vertex #" + id)
-      
-      /// already colored?
-      if(color >= 0)
+    private var _neighborOrientations = {
+      if(prevState.neighborOrientations != null)
       {
-        println("isReadyToColor() - vertex #" + id + " already colored")
-        return false;
+        ArrayBuffer[(VertexId,Int)]() ++= prevState.neighborOrientations;
       }
-           
-      
-      /// check to see if all parent neighbors have been colored
-      var result = true;
-      breakable (for(cur <- this.getNeighborOrientations()) {
-        
-        /// if we don't know all the orientations yet, we aren't ready to color
-        var orient = cur._2 match {
-          case Some(_) => { cur._2.get }
-          case _ => 
-            { 
-              println("isReadyToColor - vertex #" +id + ", waiting on orientation for #" + cur._1) 
-              result = false; break(); 
-            }
-        }
-                
-        /// wait for all parnts to be colored
-         if(orient == NeighborOrientation.PARENT)
-         {
-           this.getNeighborColor(cur._1) match {
-             case Some(_) => {}
-             case _ => {
-                 println("isReadyToColor - vertex #" + id + ", waiting on color for #" + cur._1)
-                 result = false; break(); 
-               }             
-           }
-           
-         }
-      })
-            
-      return result;
+      else{
+        ArrayBuffer[(VertexId, Int)]()
+      }
     }
-      
+    
+    private var _neighborColors = {
+      if(prevState.neighborColors != null)
+      {
+        ArrayBuffer[(VertexId, Int)]() ++= (prevState.neighborColors);
+      }
+      else{
+        ArrayBuffer[(VertexId, Int)]()
+      }
+    }    
         
-    def updateOrientationInfo(neighborId: VertexId, neighborDegree: Int, neighborPriority: Long): Unit = 
+    def process(msg: Message):Unit = 
+    {      
+        msg match {      
+          case Initialize() =>
+            /* Do nothing */ 
+        
+          case OrientationInfoMessage(neighborId,neighborDegree,neighborPriority) =>
+            this.updateOrientationInfo(neighborId, neighborDegree, neighborPriority)
+          
+          case ColorMessage(neighborId, neighborColor, neighborPathLength) =>
+            this.updateNeighborColor(neighborId, neighborColor)
+            this.updateMaxPathLength(neighborPathLength)
+      }
+        
+      if(this.isReadyToColor())
+      {
+        this._color = this.calculateColor();
+      }      
+    }
+    
+    def build() : ColoringState =
     {
+      new ColoringState(prevState.id, prevState.priority, prevState.neighborIds, 
+          this._color, this._neighborOrientations.toArray, this._neighborColors.toArray, this._maxPathLength)
+    }
+    
+    def updateMaxPathLength(neighborPathLength: Int):Unit = {
+      if(neighborPathLength + 1 > this._maxPathLength)
+      {
+        this._maxPathLength = neighborPathLength + 1; 
+      }    
+    }
+    
+    def getNeighborOrientationOffset(neighborId: VertexId): Int =
+    {
+      this._neighborOrientations.indexWhere(_._1 == neighborId)
+    }
+    
+    def getNeighborColorOffset(neighborId: VertexId): Int =
+    {
+      this._neighborColors.indexWhere(_._1 == neighborId)
+    }
+    
+    def updateOrientationInfo(neighborId: VertexId, neighborDegree: Int, neighborPriority: Long): Unit = 
+    {      
       var result = NeighborOrientation.UNKNOWN;
       
       if(neighborDegree < this._degree)
@@ -137,7 +150,7 @@ object LDPO
       {
         result = NeighborOrientation.PARENT;
       }
-      else if(neighborPriority < this._priority)
+      else if(neighborPriority < prevState.priority)
       {
         result = NeighborOrientation.PARENT;
       }
@@ -146,37 +159,106 @@ object LDPO
         result = NeighborOrientation.CHILD;
       }
       
-      this._neighborOrientation.update(neighborId, result)
-      
-      if(isReadyToColor())
+      var ndx = getNeighborOrientationOffset(neighborId);
+      if(ndx < 0)
       {
-        this._color = this.calculateColor();
+        this._neighborOrientations += ((neighborId, result));  
+      }
+      else
+      {
+        this._neighborOrientations.update(ndx, (neighborId, result))  
       }
     }
     
     def updateNeighborColor(neighborId: VertexId, neighborColor: Int): Unit=
     {
-      this._neighborOrientation.update(neighborId, neighborColor)
-      
-      if(isReadyToColor())
+      var ndx = getNeighborColorOffset(neighborId);
+      if(ndx < 0)
       {
-        this._color = this.calculateColor();
+        this._neighborColors += ((neighborId, neighborColor));
       }
+      else
+      {
+        this._neighborColors.update(ndx, (neighborId, neighborColor))  
+      }      
     }
-    
+        
+    def isReadyToColor():Boolean = 
+    {
+      //println("isReadyToColor() - vertex #" + prevState.id)
+      
+      /// already colored?
+      if(this._color >= 0)
+      {
+        //println("isReadyToColor() - vertex #" + prevState.id + " already colored")
+        return false;
+      }
+           
+      
+      /// check to see if all parent neighbors have been colored
+      var result = true;
+      breakable (for(cur <- prevState.neighborIds) 
+      {        
+        /// if we don't know all the orientations yet, we aren't ready to color
+        var orient_ndx = getNeighborOrientationOffset(cur);
+        if(orient_ndx < 0)
+        {
+          //println(s"isReadyToColor - vertex #${prevState.id}, waiting on orientation info from #$cur")
+          result = false
+          break();
+        }
+        
+        var orient = this._neighborOrientations.apply(orient_ndx)._2;
+        if(orient == NeighborOrientation.UNKNOWN)
+        {
+          //println(s"isReadyToColor - vertex #${prevState.id}, waiting on orientation info from #$cur")
+          result = false
+          break();
+        }
+                
+        /// wait for all parnts to be colored
+         if(orient == NeighborOrientation.PARENT)
+         {
+           var color_ndx = getNeighborColorOffset(cur);
+           if(color_ndx < 0)
+           {
+             //println(s"isReadyToColor - vertex #${prevState.id}, waiting on color info from parent #$cur")
+             result = false
+             break();
+           }          
+           
+           var color = this._neighborColors.apply(color_ndx)._2;
+           if(color < 0)
+           {
+             //println(s"isReadyToColor - vertex #${prevState.id}, waiting on color info from parent #$cur")
+             result = false
+             break();
+           }
+         }
+      })
+            
+      return result;
+    }
+          
     def calculateColor(): Int =
     {   
-      println("calculateColor() for vertex #" + id)
-      var neighborColors = this._neighborColor.map(n => n._2)
-                                .filter(c => c >= 0).toArray
-        
+      //println("calculateColor() for vertex #" + prevState.id)
+      var neighborColors = this._neighborColors.filter(p => p._2 >= 0)
+                                .map(m => m._2).toArray
+                                        
       scala.util.Sorting.quickSort(neighborColors);
+      //println("calculateColor() - neighbor Colors: " + neighborColors.toString)
       
       var result = 0;
       breakable(for(cur <- neighborColors)
       {
-        if(result == cur)
+        //println("calculateColor() - comparing (" + result + ", " + cur + ")")
+        if(cur < 0)
         {
+          ///ignore
+        }
+        if(result == cur)
+        {          
           result += 1;
         }
         else{
@@ -184,15 +266,13 @@ object LDPO
         }
       })
       
+      println(s"calculateColor() - vertex #${prevState.id}. applying color $result");
       return result;    
     }
   }
+  
     
-  class VertexMessage() extends Serializable
-  case class InitializeMessage() extends VertexMessage()
-  case class OrientationInfoMessage(id: VertexId, degree: Int, priority: Long) extends VertexMessage()
-  case class ColorMessage(id: VertexId, color: Int) extends VertexMessage()
-  case class BulkMessage(messages: Array[VertexMessage]) extends VertexMessage()
+
   
   
   def apply(sc: SparkContext, graph: Graph[_,_]) = 
@@ -205,19 +285,24 @@ object LDPO
     var neighborIdRDD = graph.ops.collectNeighborIds(EdgeDirection.Either)    
     
     var stateRDD = neighborIdRDD.map(v => {
-      (v._1, new VertexColoringState(v._1, v._1.toInt, v._2))
+      (v._1, new ColoringState(v._1, v._1.toInt, v._2, -1, null, null, 0))
     })
     
     var colorGraph = Graph(stateRDD, graph.edges);
     
-    var results = colorGraph.pregel[VertexMessage](
-        InitializeMessage(), Integer.MAX_VALUE, EdgeDirection.Both)(
-        vectorProgram,sendMessage, mergeMessages )
+    var maxRounds = 10 //Integer.MAX_VALUE
     
+    var initialMessage = new Array[Message](1);
+    initialMessage.update(0, Initialize());
+    
+    var results = colorGraph.pregel[Array[Message]](
+        initialMessage, maxRounds, EdgeDirection.Either)(
+        vectorProgram,sendMessage, mergeMessages )
+            
     println("\n*** RESULTS ***")
         
     results.vertices.collect().map(vdata => {
-      println("Vertex ID: " + vdata._1 + ", Color: " + vdata._2.color)
+      println(s"Vertex ID: ${vdata._1}, Color: ${vdata._2.color}, Path Length: ${vdata._2.pathLength}")
     })
         
     println("*** COMPLETE ***")
@@ -228,123 +313,67 @@ object LDPO
    * 	Based upon the previous vertex state and message, compute a new vertex state
    * 	NOTE: the initial msg sent to the vectorProgram will be null.
    */
-  def vectorProgram(id: VertexId, vdata: VertexColoringState, msg: VertexMessage): VertexColoringState =
+  def vectorProgram(id: VertexId, vdata: ColoringState, messages: Array[Message]): ColoringState =
   {       
-        
-    var messages = msg match{
-      case BulkMessage(msgArray)=> { msgArray }
-      case _ => { Array[VertexMessage](msg) }
-    }
-   
-    vdata.round_count += 1
-    println("vectorProgram. id: " + id + ", roundCount: " + vdata.round_count + ", messageCount: " + messages.length)
+    var processor = new MessageProcessor(vdata);
     
     for(curMsg <- messages)
     {
-      curMsg match {
-        case InitializeMessage() => {          
-          println("vectorProgram. id: " + id + ", InitializeMessage()")
-        }
-        
-        case OrientationInfoMessage(otherId, otherDegree, otherPriority) => {
-          println("vectorProgram. id: " + id + ", OrientationInfoMessage() from " + otherId)
-          vdata.updateOrientationInfo(otherId, otherDegree, otherPriority)
-        }
-        
-        case ColorMessage(parentId, parentColor) => {
-          println("vectorProgram. id: " + id + ", ColorMessage(" + parentId + ", " + parentColor + ")")
-          vdata.updateNeighborColor(parentId, parentColor)
-        }     
-      } 
+      processor.process(curMsg)
     }
-    
-    vdata.getNeighborOrientations().foreach(x => {
-      println("vectorProgram. id: " + id + ", otherId: " + x._1 +", orientation: " + x._2)
-    })
-    
-    
-    return vdata;
+        
+    return processor.build() 
   }
   
   /** sendMessage
    * 	Evaluate a pair of vertices + the edge connecting them what message(s) if any to send
    */
-  def sendMessage(triplet: EdgeTriplet[VertexColoringState, _]) : Iterator[(VertexId, VertexMessage)] =
+  def sendMessage(triplet: EdgeTriplet[ColoringState, _]) : Iterator[(VertexId, Array[Message])] =
   {
-    var messages = ArrayBuffer[(VertexId, VertexMessage)]()
-    
-    println("sendMessage. src: ( id: " + triplet.srcAttr.id + ", color: " + triplet.srcAttr.color);
-    println("sendMessage. dst: ( id: " + triplet.dstAttr.id + ", color: " + triplet.dstAttr.color);
-    
-    var orientationInfo = triplet.dstAttr.getNeighborOrientation(triplet.srcAttr.id)   
-    println("orientationInfo. dst->src: " + orientationInfo)
-    
-    if(!orientationInfo.isDefined)
+    var v1 = triplet.vertexAttr(triplet.srcId)
+    var v2 = triplet.vertexAttr(triplet.dstId)
+        
+    var v1Messages = ArrayBuffer[Message]()
+    var v2Messages = ArrayBuffer[Message]()
+
+    if(v1.neighborOrientations == null || !v1.neighborOrientations.exists(_._1 == v2.id))
     {
-      messages += (
-          ( triplet.dstAttr.id, 
-            OrientationInfoMessage(triplet.srcAttr.id, triplet.srcAttr.degree,triplet.srcAttr.priority))
-      )
+      v1Messages += OrientationInfoMessage(v2.id, v2.neighborIds.length,v2.priority);
     }
-    else if(orientationInfo.get == NeighborOrientation.PARENT)
+    
+    if(v2.neighborOrientations == null || !v2.neighborOrientations.exists(_._1 == v1.id))
     {
-      if(triplet.srcAttr.color >= 0)
-      {
-        var colorInfo = triplet.dstAttr.getNeighborColor(triplet.srcAttr.id)
-        if(!colorInfo.isDefined)
-        {      
-          messages += ((triplet.dstAttr.id, ColorMessage(triplet.srcAttr.id, triplet.srcAttr.color)))          
-        }
-      }
+      v2Messages += OrientationInfoMessage(v1.id, v1.neighborIds.length,v1.priority);
     }
-    
-    orientationInfo = triplet.srcAttr.getNeighborOrientation(triplet.dstAttr.id)
-    println("orientationInfo. src->dst: " + orientationInfo)
-    
-    if(!orientationInfo.isDefined)
+
+    if(v2.color >= 0 && (v1.neighborColors == null || !v1.neighborColors.exists(_._1 == v2.id)))
     {
-      messages += (
-          ( triplet.srcAttr.id, 
-            OrientationInfoMessage(triplet.dstAttr.id, triplet.dstAttr.degree,triplet.dstAttr.priority))
-      )
-    }
-    else if(orientationInfo.get == NeighborOrientation.PARENT)
-    {    
-      if(triplet.srcAttr.color >= 0)
-      {
-        var colorInfo = triplet.dstAttr.getNeighborColor(triplet.srcAttr.id)
-        if(!colorInfo.isDefined)
-        {      
-          messages += ((triplet.dstAttr.id, ColorMessage(triplet.srcAttr.id, triplet.srcAttr.color)))          
-        }
-      }
-    }
+      v1Messages += ColorMessage(v2.id, v2.color, v2.pathLength);
+    }   
+
+    if(v1.color >= 0 && (v2.neighborColors == null || !v2.neighborColors.exists(_._1 == v1.id)))
+    {
+      v2Messages += ColorMessage(v1.id, v1.color, v1.pathLength);
+    }    
     
-     return messages.toIterator   
+     var results = ArrayBuffer[(VertexId, Array[Message])]()
+     results += ((v1.id, v1Messages.toArray));
+     results += ((v2.id, v2Messages.toArray));
+     
+     results.iterator
   }
   
   /** mergeMessages
    *  
    */
-  def mergeMessages(a: VertexMessage, b: VertexMessage): VertexMessage = 
+  def mergeMessages(a: Array[Message], b: Array[Message]): Array[Message] = 
   {
-    var messagesA = a match{
-      case BulkMessage(messages) => { messages }
-      case _ => { Array[VertexMessage](a) }
-    }
+    var buffer  = ArrayBuffer[Message]()
+    if(a != null) buffer.appendAll(a)
+    if(b != null) buffer.appendAll(b)
     
-    var messagesB = b match {
-      case BulkMessage(messages) => { messages }
-      case _ => { Array[VertexMessage](b) }
-    }
-    
-    var buffer  = ArrayBuffer[VertexMessage]()
-    buffer.appendAll(messagesA)
-    buffer.appendAll(messagesB)
-    
-    BulkMessage(buffer.toArray)
-  }
-  
+    buffer.toArray
+  }  
 }
 
 

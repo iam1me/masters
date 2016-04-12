@@ -16,6 +16,7 @@ import org.json4s.jackson._;
 import org.json4s.jackson.JsonMethods._;
 import org.json4s.jackson.Serialization._;
 
+import org.apache.spark._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.GraphGenerators
@@ -81,8 +82,15 @@ object App {
     println("parsing input json...");
     var inputGraph = GraphParser.parse(sc, inputString);
     
-    
-    LDPO.apply(sc, inputGraph);
+    //val testGraph =
+      //GraphUtilities.GenerateGraph[Double,Int](sc, 100, 0.5, 1)
+      
+    var testGraph = GraphGenerators.logNormalGraph(sc, 100, 5, 100, 100, 100)
+      
+    println("testGraph vertex Count: " + testGraph.ops.numVertices)
+    println("testGraph edge Count: " + testGraph.ops.numEdges)
+      
+    LDPO.apply(sc, testGraph);
     
     /*
     var results = new LDO().apply(inputGraph);
@@ -166,7 +174,8 @@ object App {
     // Create a graph with "age" as the vertex property.  Here we use a random graph for simplicity.
     val graph =
       GraphUtilities.GenerateGraph[Double,Int](sc, 100, 0.5, 1)
-   
+      
+         
       
    println("graph generated successfully")
       
