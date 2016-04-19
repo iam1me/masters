@@ -39,9 +39,9 @@ object LDPO
    */
   object NeighborOrientation
   {
-    def UNKNOWN = 0;
-    def PARENT = 1;
-    def CHILD = 2;
+    val UNKNOWN: Int = 0;
+    val PARENT: Int = 1;
+    val CHILD: Int = 2;
   }
   
   /**	ColoringState
@@ -106,7 +106,13 @@ object LDPO
           
           case ColorMessage(neighborId, neighborColor, neighborPathLength) =>
             this.updateNeighborColor(neighborId, neighborColor)
-            this.updateMaxPathLength(neighborPathLength)
+            if(this._color < 0)
+            {
+              this.updateMaxPathLength(neighborPathLength)
+            }
+            
+          case _ =>
+            throw new Error("Unrecognized message");
       }
         
       if(this.isReadyToColor())
@@ -171,7 +177,7 @@ object LDPO
     }
     
     def updateNeighborColor(neighborId: VertexId, neighborColor: Int): Unit=
-    {
+    {      
       var ndx = getNeighborColorOffset(neighborId);
       if(ndx < 0)
       {
@@ -179,6 +185,7 @@ object LDPO
       }
       else
       {
+        println(s"updateNeigbhorColor - ${prevState.id} already has an entry for $neighborId. updating.");
         this._neighborColors.update(ndx, (neighborId, neighborColor))  
       }      
     }
@@ -266,7 +273,7 @@ object LDPO
         }
       })
       
-      println(s"calculateColor() - vertex #${prevState.id}. applying color $result");
+      //println(s"calculateColor() - vertex #${prevState.id}. applying color $result");
       return result;    
     }
   }
@@ -275,7 +282,7 @@ object LDPO
 
   
   
-  def apply(sc: SparkContext, graph: Graph[_,_]) = 
+  def apply(sc: SparkContext, graph: Graph[_,_]): Graph[ColoringState, _] = 
   {    
     println("");
     
@@ -290,22 +297,39 @@ object LDPO
     
     var colorGraph = Graph(stateRDD, graph.edges);
     
-    var maxRounds = 10 //Integer.MAX_VALUE
-    
     var initialMessage = new Array[Message](1);
     initialMessage.update(0, Initialize());
     
     var results = colorGraph.pregel[Array[Message]](
-        initialMessage, maxRounds, EdgeDirection.Either)(
+        initialMessage, Integer.MAX_VALUE, EdgeDirection.Either)(
         vectorProgram,sendMessage, mergeMessages )
             
     println("\n*** RESULTS ***")
         
     results.vertices.collect().map(vdata => {
-      println(s"Vertex ID: ${vdata._1}, Color: ${vdata._2.color}, Path Length: ${vdata._2.pathLength}")
+      var parents = "";
+      var children = "";      
+      for(curId <- vdata._2.neighborIds)
+      {
+        var orientation = vdata._2.neighborOrientations.find(_._1 == curId).get;
+        orientation._2 match{
+          case NeighborOrientation.CHILD =>
+            children += curId + ",";
+          
+          case NeighborOrientation.PARENT =>
+            parents += curId + ",";
+          
+          case _ =>
+            throw new Error(s"Unknown orientation for $curId in ${vdata._1}")
+        }
+      }
+      println(s"Vertex ID: ${vdata._1}, Color: ${vdata._2.color}, Degree: ${vdata._2.neighborIds.length}, "
+        + s"Path Length: ${vdata._2.pathLength}, Parents: {$parents}, Children: {$children}");
     })
         
     println("*** COMPLETE ***")
+    
+    return results;
   }
   
   /** vectorProgram
@@ -315,14 +339,24 @@ object LDPO
    */
   def vectorProgram(id: VertexId, vdata: ColoringState, messages: Array[Message]): ColoringState =
   {       
-    var processor = new MessageProcessor(vdata);
+    //println(s"vectorProgram - processing messages to $id. count: ${messages.length}")
     
-    for(curMsg <- messages)
+    if(messages.length > 0)
     {
-      processor.process(curMsg)
+      var processor = new MessageProcessor(vdata);
+      
+      for(curMsg <- messages)
+      {
+        processor.process(curMsg)
+      }
+      
+      var result = processor.build()          
+      return result;
     }
-        
-    return processor.build() 
+    else{
+      println(s"vectorProgram for $id: no change this round")
+      return vdata;
+    }
   }
   
   /** sendMessage
@@ -333,32 +367,58 @@ object LDPO
     var v1 = triplet.vertexAttr(triplet.srcId)
     var v2 = triplet.vertexAttr(triplet.dstId)
         
-    var v1Messages = ArrayBuffer[Message]()
-    var v2Messages = ArrayBuffer[Message]()
+    var v1Messages:ArrayBuffer[Message] = null
+    var v2Messages:ArrayBuffer[Message] = null
+    
+    var v1Orient = NeighborOrientation.UNKNOWN;
+    var v2Orient = NeighborOrientation.UNKNOWN;
 
     if(v1.neighborOrientations == null || !v1.neighborOrientations.exists(_._1 == v2.id))
     {
+      v1Messages = ArrayBuffer[Message]();
       v1Messages += OrientationInfoMessage(v2.id, v2.neighborIds.length,v2.priority);
     }
+    else if(v1.neighborOrientations != null)
+    {
+      v1.neighborOrientations.find(_._1 ==  v2.id) match {
+        case Some((id:Long, o:Int)) => v2Orient = o
+        case _ => ;
+      }
+    }
+    
     
     if(v2.neighborOrientations == null || !v2.neighborOrientations.exists(_._1 == v1.id))
     {
+      v2Messages = ArrayBuffer[Message]()
       v2Messages += OrientationInfoMessage(v1.id, v1.neighborIds.length,v1.priority);
     }
-
-    if(v2.color >= 0 && (v1.neighborColors == null || !v1.neighborColors.exists(_._1 == v2.id)))
+    else if(v2.neighborOrientations != null)
     {
+      v2.neighborOrientations.find(_._1 == v1.id) match {
+        case Some((id:Long, o:Int)) => v1Orient = o
+        case _ => ;
+      }
+    }
+
+    if(v2Orient == NeighborOrientation.PARENT && v2.color >= 0 
+        && (v1.neighborColors == null || !v1.neighborColors.exists(_._1 == v2.id)))
+    {
+      if(v1Messages == null) v1Messages = ArrayBuffer[Message]()
       v1Messages += ColorMessage(v2.id, v2.color, v2.pathLength);
+      //println(s"sending ${v2.id} color to ${v1.id}")
     }   
 
-    if(v1.color >= 0 && (v2.neighborColors == null || !v2.neighborColors.exists(_._1 == v1.id)))
+    if(v1Orient == NeighborOrientation.PARENT && v1.color >= 0 
+        && (v2.neighborColors == null || !v2.neighborColors.exists(_._1 == v1.id)))
     {
+      if(v2Messages == null) v2Messages = ArrayBuffer[Message]() 
       v2Messages += ColorMessage(v1.id, v1.color, v1.pathLength);
+      //println(s"sending ${v1.id} color to ${v2.id}")
     }    
     
      var results = ArrayBuffer[(VertexId, Array[Message])]()
-     results += ((v1.id, v1Messages.toArray));
-     results += ((v2.id, v2Messages.toArray));
+     if(v1Messages != null) results += ((v1.id, v1Messages.toArray));
+     if(v2Messages != null) results += ((v2.id, v2Messages.toArray));
      
      results.iterator
   }
@@ -368,11 +428,20 @@ object LDPO
    */
   def mergeMessages(a: Array[Message], b: Array[Message]): Array[Message] = 
   {
-    var buffer  = ArrayBuffer[Message]()
-    if(a != null) buffer.appendAll(a)
-    if(b != null) buffer.appendAll(b)
+    if(a != null) 
+    {
+      if( b != null)
+      {
+        return a ++ b;
+      }
+      return a;
+    }
+    else if(b != null)
+    {
+      return b;
+    }
     
-    buffer.toArray
+    return Array[Message]();
   }  
 }
 
