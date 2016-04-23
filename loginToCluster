@@ -1,0 +1,3 @@
+source exportClusterSettings
+
+$SPARK_HOME/ec2/spark-ec2 --key-pair=mastersInstance --identity-file=mastersInstance.pem --region=us-west-1  login masters-cluster

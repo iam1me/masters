@@ -17,7 +17,7 @@ object GraphParser
   
   def parse(sc: SparkContext, jsonData: String): Graph[JObject,JObject] = 
   {
-    var parsedData = org.json4s.jackson.JsonMethods.parse(jsonData);
+    var parsedData = org.json4s.jackson.JsonMethods.parse(jsonData, true);
     
     var vertexData = (parsedData \\ "vertices");
     var edgeData = (parsedData \\ "edges");
