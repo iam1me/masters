@@ -1,0 +1,12 @@
+source exportClusterSettings
+source exportMasterAddr
+
+#create the /root/app directory on the master
+ssh -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR "mkdir /root/app" 
+
+#copy masters.jar to the /root/app directory on master
+scp -i $AWS_IDENTITY_FILE target/masters.jar root@$AWS_MASTER_ADDR:/root/app
+
+#copy-dir the app directory across all servers in the cluster
+ssh -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR "/root/spark-ec2/copy-dir /root/app"
+

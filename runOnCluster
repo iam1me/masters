@@ -1,0 +1,4 @@
+source exportClusterSettings
+source exportMasterAddr
+
+ssh -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR "/root/spark/bin/spark-submit --class csci.ryan_williams.masters.App /root/app/masters.jar"

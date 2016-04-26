@@ -1,0 +1,3 @@
+source exportClusterSettings
+
+$SPARK_HOME/ec2/spark-ec2 --key-pair=$AWS_KEY_PAIR --identity-file=$AWS_IDENTITY_FILE --region=$AWS_REGION destroy $AWS_CLUSTER_NAME

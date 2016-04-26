@@ -1,4 +1,4 @@
 source exportClusterSettings
 
-$SPARK_HOME/ec2/spark-ec2 --key-pair=mastersInstance --identity-file=mastersInstance.pem --region=us-west-1 --instance-type=t2.micro --slaves=1  launch masters-cluster
+$SPARK_HOME/ec2/spark-ec2 --key-pair=$AWS_KEY_PAIR --identity-file=$AWS_IDENTITY_FILE --region=$AWS_REGION --instance-type=$AWS_INSTANCE_TYPE --slaves=$AWS_SLAVES launch $AWS_CLUSTER_NAME
 
