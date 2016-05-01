@@ -106,7 +106,7 @@ object App
     var strEdgeRDD = GraphUtilities.SerializeEdges(testGraph);
     strVertexRDD.saveAsObjectFile(inputVerticesPath)
     strEdgeRDD.saveAsObjectFile(inputEdgePath)   
-    */
+    
       
     var results = LDPO.apply(sc, testGraph);
     var uncoloredVertices = results.vertices.filter(p => p._2.color < 0);
@@ -128,7 +128,7 @@ object App
     var outputPath= s"./output/$strTime";
     //GraphUtilities.saveGraph(outputGraph, outputPath)
     
-    /*
+    
     println(s"loading graph from $outputPath");
     var copyGraph = GraphUtilities.loadGraph(sc, outputPath)
     println("success!")

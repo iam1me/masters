@@ -1,13 +1,16 @@
 package csci.ryan_williams.masters
 
-import org.apache.spark.SparkContext
+
+//import java.nio.file._
 
 import org.json4s._
 import org.json4s.JsonDSL._;
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.graphx
+import org.apache.commons.io._;
+
+import org.apache.spark._
+import org.apache.spark.rdd._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util._
 
@@ -17,6 +20,7 @@ import scala.reflect._
 import scala.collection.mutable._;
 import scala.util._;
 import scala.sys._;
+import java.util.UUID
 
 /**
  * GraphHelper.scala
@@ -24,6 +28,10 @@ import scala.sys._;
  */
 object GraphUtilities
 {
+  val IdFieldName="id";
+  val SourceIdFieldName="srcId";
+  val DestinationIdFieldName="dstId";
+  
   private val _numGenerator = new Random();
   this._numGenerator.setSeed(java.util.Calendar.getInstance().getTimeInMillis());
   
@@ -70,67 +78,102 @@ object GraphUtilities
     return GraphGenerator.generate(sc, nodeCount, edgeCount);
   }
   
+  def setField(obj: JObject, fieldName: String, fieldValue: JValue): JObject =
+  {
+    (obj \ fieldName) match {
+      case JNothing => {
+        obj ~ (fieldName, fieldValue);
+      }
+      case _ => {
+        obj.replace(List(fieldName), fieldValue).asInstanceOf[JObject]        
+      }
+    }
+  }
+  
   def saveGraph(graph: Graph[JObject,JObject], basePath: String) = 
   {
     var vertexPath= s"$basePath/vertices";
     var edgePath = s"$basePath/edges";
     
+    /// if they exists, clear the destination directories
+    FileUtils.deleteDirectory(new java.io.File(vertexPath))
+    FileUtils.deleteDirectory(new java.io.File(edgePath))
+    
+    
+    /// save results to the temp directory
     graph.vertices
       .map(v => {
-          
-          var jobj = v._2;
-          if(jobj \ "id" == JNothing)
-          {
-            jobj = jobj ~ JField("id", BigInt(v._1))
-          }
-          else{
-            jobj.replace(List("id"), BigInt(v._1.toString))
-          }
-          
+          var jobj = setField(v._2, IdFieldName, v._1);
           compact(jobj)
       })
       .saveAsTextFile(vertexPath);
     
     graph.edges
       .map(e => {
-          var jobj = e.attr;
-                   
-          if(jobj \ "srcId" == JNothing)
-          {
-            jobj = jobj ~ ("srcId", e.srcId)
-          }
-          else{
-            jobj.replace(List("srcId"), BigInt(e.srcId))
-          }
-          
-          if(jobj \ "dstId" == JNothing)
-          {
-            jobj = jobj ~ ("dstId", BigInt(e.dstId))
-          }
-          else{
-            jobj.replace(List("dstId"), BigInt(e.dstId))
-          }
-
+          var jobj = setField(e.attr, SourceIdFieldName, e.srcId);
+          jobj = setField(jobj, DestinationIdFieldName, e.dstId);
           compact(jobj)
         })
       .saveAsTextFile(edgePath);
   }  
   
-  /*def saveGraph(graph: Graph[_,_], basePath: String) =
-  {
+  def loadGraph[VD : ClassTag, ED: ClassTag](sc: SparkContext, basePath: String): Graph[JObject,JObject] =
+  {  
     var vertexPath= s"$basePath/vertices";
     var edgePath = s"$basePath/edges";
-    graph.vertices.saveAsObjectFile(vertexPath)
-    graph.edges.saveAsObjectFile(edgePath)
+    
+    var vertices = sc.textFile(vertexPath)
+                     .map(v => parseVertex(v));
+    
+    var edges = sc.textFile(edgePath)
+                  .map(e => parseEdge(e));
+    
+    return Graph(vertices,edges)
   }
   
-  def loadGraph[VD : ClassTag, ED: ClassTag](sc: SparkContext, basePath: String): Graph[VD,ED] =
+  def parseVertex(jsonData: String): (VertexId, JObject) =
   {
-    var vertexPath= s"$basePath/vertices";
-    var edgePath = s"$basePath/edges";
-    var vertices = sc.objectFile[(VertexId, VD)](vertexPath)
-    var edges = sc.objectFile[Edge[ED]](edgePath)
-    return Graph(vertices,edges)
-  }*/
+    var jobj = org.json4s.jackson.JsonMethods.parse(jsonData, true)
+                .asInstanceOf[JObject];
+    
+    var idField = (jobj \ IdFieldName)
+    idField match{
+      case x: JInt => {
+        return (x.num.toLong, jobj);
+      }
+      case _ => {
+        throw new Error(s"Failed to parse id from json: '$jsonData'");
+      }
+    }    
+  }
   
+  def parseEdge(jsonData: String): Edge[JObject] =
+  {
+    var jobj = org.json4s.jackson.JsonMethods.parse(jsonData, true)
+                .asInstanceOf[JObject];
+    
+    var srcId:Long = -1;
+    var idField = (jobj \ SourceIdFieldName)
+    idField match{
+      case x: JInt => {
+        srcId = x.num.toLong;
+      }
+      case _ => {
+        throw new Error(s"Failed to parse $SourceIdFieldName from json: '$jsonData'");
+      }
+    }    
+    
+    var destId:VertexId = -1;
+    idField = (jobj \ DestinationIdFieldName)
+    idField match{
+      case x: JInt => {
+        destId = x.num.toLong;
+      }
+      case _ => {
+        throw new Error(s"Failed to parse $DestinationIdFieldName from json: '$jsonData'");
+      }
+    } 
+    
+    return Edge[JObject](srcId,destId,jobj)
+  }
 }

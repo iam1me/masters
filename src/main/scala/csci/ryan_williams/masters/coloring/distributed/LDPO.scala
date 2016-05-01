@@ -282,7 +282,7 @@ object LDPO
 
   
   
-  def apply(sc: SparkContext, graph: Graph[_,_]): Graph[ColoringState, _] = 
+  def apply(sc: SparkContext, graph: Graph[_,_]): VertexRDD[ColoringState] = 
   {    
     println("");
     
@@ -329,7 +329,7 @@ object LDPO
         
     println("*** COMPLETE ***")
     
-    return results;
+    return results.vertices;
   }
   
   /** vectorProgram

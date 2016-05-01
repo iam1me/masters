@@ -18,14 +18,13 @@ import scala.sys._;
 object GraphGenerator {
   
   val usage = """
-      usage: GraphGenerator --order=num --density=double [--dest=path] graphName
+      usage: GraphGenerator --order=num --density=double path/to/graphName
     """
   
   class Settings {
     var order = 0L;
     var density = 0D;
-    var dest = "./";
-    var name = "graph";
+    var dest = "./testGraph";
   }
   
   private val _numGenerator = new Random();
@@ -53,14 +52,13 @@ object GraphGenerator {
     var graph = generate(sc, settings.order, edgeCount);
     println("GraphGenerator::main - graph has been generated successfully");
     
-    var output_dir = Paths.get(settings.dest, settings.name);
+    var output_dir = settings.dest
     println(s"GraphGenerator::main - saving graph to '$output_dir'");
     
-    GraphUtilities.saveGraph(graph, output_dir.toString())
+    GraphUtilities.saveGraph(graph, output_dir)
   }
   
   val settingsRegex = "^--([^=\\s]*)=([^\\s]*)$".r;
-  val namePattern = "^[\\w \\-]+$";
   def parseSettings(args: Array[String]): Settings = 
   {
     var result = new Settings();
@@ -89,21 +87,14 @@ object GraphGenerator {
           result.density = settingValue.toDouble;
           if(result.density < 0) throw new Error("density out of range");
         }
-        case "dest" => {
-          result.dest = settingValue;
-        }
         case _ => {
           throw new Error("Unrecognized setting: " + settingName);
         }
       }     
     }
         
-    result.name = args.apply(args.length - 1);    
-    if(!result.name.matches(this.namePattern))
-    {
-      throw new Error(s"Invalid graph name: '${result.name}'");
-    }
-    
+    result.dest = args.apply(args.length - 1);    
+        
     return result;
   }
   
