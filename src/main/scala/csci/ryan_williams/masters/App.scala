@@ -30,9 +30,9 @@ object App
   def main(args: Array[String])
   {
     /// NOTE: SparkConf is configured via spark-submit script and the default settings file
-    var conf = new SparkConf()
-    var sc = new SparkContext(conf)   
-        
+    var conf = new SparkConf()    
+    var sc = new SparkContext(conf)  
+    
     run(sc, System.in, System.out)
     
     println("App::main - complete")
@@ -126,7 +126,7 @@ object App
     var outputGraph = Graph(results.vertices.map(v => (v._1, v._2.color)), results.edges)
     
     var outputPath= s"./output/$strTime";
-    GraphUtilities.saveGraph(outputGraph, outputPath)
+    //GraphUtilities.saveGraph(outputGraph, outputPath)
     
     /*
     println(s"loading graph from $outputPath");
