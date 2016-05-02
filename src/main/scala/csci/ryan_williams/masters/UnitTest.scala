@@ -31,9 +31,11 @@ object UnitTest {
   class Results extends Serializable {
     var local_maximum_degree = 0D;
     var local_maximum_path = 0D;
+    var local_maximum_color = 0D;
     var local_rounds = 0D;
     var avg_maximum_degree = 0D;
     var avg_maximum_path = 0D;
+    var avg_maximum_color = 0D;
     var avg_rounds = 0D;
   }
   
@@ -51,15 +53,8 @@ object UnitTest {
     var sc = new SparkContext(conf)  
     
     var results = apply(sc, settings);
-    
-    var json = s"""
-      {
-        "avg_max_degree" : ${results.avg_maximum_degree},
-        "avg_max_path" : ${results.avg_maximum_path}
-      }
-      """;
       
-    println(json)    
+    println(pretty(resultsToJson(results)))  
   }
   
   val settingsRegex = "^--([^=\\s]*)=([^\\s]*)$".r;
@@ -174,13 +169,26 @@ object UnitTest {
       }      
     }).max().toDouble
     
+    var max_color = graph.vertices.map(x => {
+      (x._2 \ ColorGraph.ColorFieldName) match {
+        case value: JInt => {
+          value.num.toInt
+        }
+        case _ => {
+          throw new Error("Failed to parse color")
+        }
+      }
+    }).max().toDouble
+    
     var results = new Results();
     var total_attempts = settings.sampleSize * settings.repitions;
     results.local_maximum_degree = max_degree;
     results.local_maximum_path = max_path;
+    results.local_maximum_color = max_color;
     results.local_rounds = max_path + 1; // orientation round
     results.avg_maximum_degree = max_degree / total_attempts;
     results.avg_maximum_path = max_path / total_attempts;
+    results.avg_maximum_color = max_color / total_attempts;
     results.avg_rounds = results.local_rounds / total_attempts;
     results;
   }
@@ -189,6 +197,7 @@ object UnitTest {
     var result = new Results();
     result.avg_maximum_degree = r1.avg_maximum_degree + r2.avg_maximum_degree;
     result.avg_maximum_path = r1.avg_maximum_path + r2.avg_maximum_path;
+    result.avg_maximum_color = r1.avg_maximum_color + r2.avg_maximum_color;
     result.avg_rounds = r1.avg_rounds + r2.avg_rounds;
     result;
   }
@@ -197,9 +206,11 @@ object UnitTest {
     
     var jobj = ("local_maximum_degree", JDouble(results.local_maximum_degree)) ~ 
                ("local_maximum_path", JDouble(results.local_maximum_path)) ~
+               ("local_maximum_color", JDouble(results.local_maximum_color)) ~
                ("local_rounds", JDouble(results.local_rounds)) ~               
                ("avg_maximum_degree", JDouble(results.avg_maximum_degree)) ~
                ("avg_maximum_path", JDouble(results.avg_maximum_path)) ~
+               ("avg_maximum_color", JDouble(results.avg_maximum_color)) ~
                ("avg_rounds", JDouble(results.avg_rounds))
                
     jobj
