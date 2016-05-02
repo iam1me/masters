@@ -282,12 +282,18 @@ object LDPO
 
   
   
-  def apply(sc: SparkContext, graph: Graph[_,_]): VertexRDD[ColoringState] = 
+  def apply(graph: Graph[_,_]): VertexRDD[ColoringState] = 
   {    
     println("");
     
+    if(graph == null) 
+      throw new Exception("LDPO ERROR: graph is null")
+    
+    if(graph.vertices == null)
+      throw new Exception("LDPO ERROR: graph.vertices == null");
+    
     if(graph.vertices.count() == 0)
-      throw new Exception("graph is empty");
+      throw new Exception("LDPO ERROR: graph is empty");
     
     var neighborIdRDD = graph.ops.collectNeighborIds(EdgeDirection.Either)    
     

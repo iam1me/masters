@@ -75,7 +75,7 @@ object GraphUtilities
      **/
     
     var edgeCount = (edgeDensity * (nodeCount * (nodeCount - 1) / 2D)).round;
-    return GraphGenerator.generate(sc, nodeCount, edgeCount);
+    return GraphGenerator.apply(sc, nodeCount, edgeCount);
   }
   
   def setField(obj: JObject, fieldName: String, fieldValue: JValue): JObject =
@@ -90,15 +90,19 @@ object GraphUtilities
     }
   }
   
+  def deleteDirectory(path:String):Unit = 
+  {
+    FileUtils.deleteDirectory(new java.io.File(path));
+  }
+  
   def saveGraph(graph: Graph[JObject,JObject], basePath: String) = 
   {
     var vertexPath= s"$basePath/vertices";
     var edgePath = s"$basePath/edges";
     
     /// if they exists, clear the destination directories
-    FileUtils.deleteDirectory(new java.io.File(vertexPath))
-    FileUtils.deleteDirectory(new java.io.File(edgePath))
-    
+    deleteDirectory(vertexPath)
+    deleteDirectory(edgePath)    
     
     /// save results to the temp directory
     graph.vertices

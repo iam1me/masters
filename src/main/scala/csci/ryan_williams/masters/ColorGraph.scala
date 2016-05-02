@@ -45,7 +45,7 @@ object ColorGraph {
     var sc = new SparkContext(conf) 
         
     var graph = GraphUtilities.loadGraph(sc, settings.sourcePath);
-    var coloring = LDPO.apply(sc, graph)
+    var coloring = LDPO.apply(graph)
     
     var coloredGraph = apply(graph, coloring);
     

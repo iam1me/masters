@@ -49,7 +49,7 @@ object GraphGenerator {
     var sc = new SparkContext(conf)  
         
     var edgeCount = calculateEdgeCount(settings);
-    var graph = generate(sc, settings.order, edgeCount);
+    var graph = apply(sc, settings.order, edgeCount);
     println("GraphGenerator::main - graph has been generated successfully");
     
     var output_dir = settings.dest
@@ -107,7 +107,7 @@ object GraphGenerator {
     return (settings.density * (settings.order * (settings.order - 1) / 2D)).round;
   }
   
-  def generate(sc: SparkContext, nodeCount:Long, edgeCount: Long): Graph[JObject,JObject] = 
+  def apply(sc: SparkContext, nodeCount:Long, edgeCount: Long): Graph[JObject,JObject] = 
   {
     var edgeMap = new HashMap[VertexId, ArrayBuffer[VertexId]]();
     

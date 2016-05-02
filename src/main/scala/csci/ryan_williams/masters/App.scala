@@ -25,7 +25,6 @@ import org.apache.log4j.ConsoleAppender.SystemOutStream
  */
 object App 
 {  
-  implicit val formats = Serialization.formats(NoTypeHints)
   
   def main(args: Array[String])
   {
