@@ -185,7 +185,7 @@ object UnitTest {
     results.local_maximum_degree = max_degree;
     results.local_maximum_path = max_path;
     results.local_maximum_color = max_color;
-    results.local_rounds = max_path + 1; // orientation round
+    results.local_rounds = max_path + 2; // orientation round and first color round where |path| = 0
     results.avg_maximum_degree = max_degree / total_attempts;
     results.avg_maximum_path = max_path / total_attempts;
     results.avg_maximum_color = max_color / total_attempts;

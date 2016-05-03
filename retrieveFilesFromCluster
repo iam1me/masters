@@ -1,0 +1,8 @@
+source exportClusterSettings
+source exportMasterAddr
+
+ssh -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR "/root/ephemeral-hdfs/bin/hadoop dfs -get /root /root/results"
+
+ssh -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR "tar -zcvf /root/results.tar.gz /root/results"
+
+scp -i $AWS_IDENTITY_FILE root@$AWS_MASTER_ADDR:/root/results.tar.gz  /home/iam1me/Documents/masters/results.targ.gz
