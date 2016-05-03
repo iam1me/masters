@@ -185,7 +185,7 @@ object LDPO
       }
       else
       {
-        println(s"updateNeigbhorColor - ${prevState.id} already has an entry for $neighborId. updating.");
+        //println(s"updateNeigbhorColor - ${prevState.id} already has an entry for $neighborId. updating.");
         this._neighborColors.update(ndx, (neighborId, neighborColor))  
       }      
     }
@@ -310,6 +310,7 @@ object LDPO
         initialMessage, Integer.MAX_VALUE, EdgeDirection.Either)(
         vectorProgram,sendMessage, mergeMessages )
             
+    /*    
     println("\n*** RESULTS ***")
         
     results.vertices.collect().map(vdata => {
@@ -334,6 +335,7 @@ object LDPO
     })
         
     println("*** COMPLETE ***")
+    */
     
     return results.vertices;
   }

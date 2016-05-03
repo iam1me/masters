@@ -117,31 +117,52 @@ object UnitTest {
     /// Step #1. Generate the graphs to color
     for(i <- 0L to settings.sampleSize - 1)
     {
+      var graph:Graph[JObject,JObject] = null
       println(s"UnitTest::apply - generating graph #$i of ${settings.sampleSize}")
-      var graph = GraphUtilities.GenerateGraphWithDensity(sc, 
+      try{
+      graph = GraphUtilities.GenerateGraphWithDensity(sc, 
           settings.order, settings.density)
+      }catch{
+        case e : Throwable => {
+          println(s"UnitTest::apply - an error occurred while generating graph #$i")
+          throw e
+        }
+      }
           
       println(s"UnitTest::apply - coloring graph #$i of ${settings.sampleSize}")
       for(j <- 0 to settings.repitions - 1)
       {
         println(s"UnitTest::apply - generating coloring #$j of ${settings.repitions} for graph #$i");
-        var coloring = LDPO.apply(graph);
+        var coloring:VertexRDD[LDPO.ColoringState] = null
+        try{
+          coloring = LDPO.apply(graph);
+        }catch {
+          case e : Throwable => {
+            println(s"UnitTest::apply - an error occured while coloring graph #$i, iteration #$j")
+            throw e
+          }
+        }
         var coloredGraph = ColorGraph.apply(graph,coloring);
         
         var localResults = getResults(coloredGraph, settings);
         
         var path = s"${settings.destPath}/graphs/$i/$j";
-        println(s"UnitTest::apply - saving results for iteration #${j} for graph #${i} to ${path}");
-        GraphUtilities.deleteDirectory(path)
-        GraphUtilities.saveGraph(coloredGraph, path)        
+        //println(s"UnitTest::apply - saving results for iteration #${j} for graph #${i} to ${path}");
+        //GraphUtilities.deleteDirectory(path)
+        //GraphUtilities.saveGraph(coloredGraph, path)       
         
-        var resultsJson = resultsToJson(localResults)
-        var jsonRDD = sc.parallelize[String](Seq(compact(resultsJson)))
-        jsonRDD.saveAsTextFile(path + "/unittest")  
+        coloredGraph.unpersist(false)
+        
+        //var resultsJson = resultsToJson(localResults)
+        //var jsonRDD = sc.parallelize[String](Seq(compact(resultsJson)))
+        //jsonRDD.saveAsTextFile(path + "/unittest")  
+        //jsonRDD.unpersist(false)
         
         println(s"UnitTest::apply - updating results after iteration #$j for graph #$i")
         results = combineResults(results, localResults)
       }
+      
+      graph.unpersist(false)
     }
     
     var finalResultsPath = s"${settings.destPath}/unittest";
