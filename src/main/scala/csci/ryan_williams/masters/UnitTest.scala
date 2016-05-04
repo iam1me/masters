@@ -18,13 +18,13 @@ import csci.ryan_williams.masters.coloring.distributed._
 
 object UnitTest {
   val usage = """
-    UnitTest --graph-order=integer --graph-density=double --sample-size=integer --repitions=integer path/for/results
+    UnitTest --graph-order=integer --graph-density=double --sample-size=integer --trials=integer path/for/results
     """
   class Settings extends Serializable {
     var order = 0L;
-    var density = .05D;
+    var density = .001D;
     var sampleSize = 1;
-    var repitions = 1;
+    var trials = 1;
     var destPath = "./unit_test";
   }
   
@@ -32,10 +32,12 @@ object UnitTest {
     var local_maximum_degree = 0D;
     var local_maximum_path = 0D;
     var local_maximum_color = 0D;
+    var local_color_count = 0D;
     var local_rounds = 0D;
     var avg_maximum_degree = 0D;
     var avg_maximum_path = 0D;
     var avg_maximum_color = 0D;
+    var avg_color_count = 0D;
     var avg_rounds = 0D;
   }
   
@@ -87,8 +89,8 @@ object UnitTest {
         case "sample-size" => {
           result.sampleSize = settingValue.toInt;          
         }
-        case "repitions" => {
-          result.repitions = settingValue.toInt;          
+        case "trials" => {
+          result.trials = settingValue.toInt;          
         }
         
         case _ => {
@@ -102,7 +104,7 @@ object UnitTest {
     if(result.order <= 0) throw new Error("order must be >= 1")
     if(result.density <= 0) throw new Error("density must be > 0")
     if(result.sampleSize <= 0) throw new Error("sample-size must be > 0")
-    if(result.repitions <= 0) throw new Error("repitionions must be > 0")
+    if(result.trials <= 0) throw new Error("trials must be > 0")
     
     return result;
   }
@@ -130,9 +132,9 @@ object UnitTest {
       }
           
       println(s"UnitTest::apply - coloring graph #$i of ${settings.sampleSize}")
-      for(j <- 0 to settings.repitions - 1)
+      for(j <- 0 to settings.trials - 1)
       {
-        println(s"UnitTest::apply - generating coloring #$j of ${settings.repitions} for graph #$i");
+        println(s"UnitTest::apply - generating coloring #$j of ${settings.trials} for graph #$i");
         var coloring:VertexRDD[LDPO.ColoringState] = null
         try{
           coloring = LDPO.apply(graph);
@@ -147,16 +149,16 @@ object UnitTest {
         var localResults = getResults(coloredGraph, settings);
         
         var path = s"${settings.destPath}/graphs/$i/$j";
-        //println(s"UnitTest::apply - saving results for iteration #${j} for graph #${i} to ${path}");
-        //GraphUtilities.deleteDirectory(path)
-        //GraphUtilities.saveGraph(coloredGraph, path)       
+        println(s"UnitTest::apply - saving results for iteration #${j} for graph #${i} to ${path}");
+        GraphUtilities.deleteDirectory(path)
+        GraphUtilities.saveGraph(coloredGraph, path)       
         
         coloredGraph.unpersist(false)
         
-        //var resultsJson = resultsToJson(localResults)
-        //var jsonRDD = sc.parallelize[String](Seq(compact(resultsJson)))
-        //jsonRDD.saveAsTextFile(path + "/unittest")  
-        //jsonRDD.unpersist(false)
+        var resultsJson = resultsToJson(localResults)
+        var jsonRDD = sc.parallelize[String](Seq(compact(resultsJson)))
+        jsonRDD.saveAsTextFile(path + "/unittest")  
+        jsonRDD.unpersist(false)
         
         println(s"UnitTest::apply - updating results after iteration #$j for graph #$i")
         results = combineResults(results, localResults)
@@ -202,14 +204,16 @@ object UnitTest {
     }).max().toDouble
     
     var results = new Results();
-    var total_attempts = settings.sampleSize * settings.repitions;
+    var total_attempts = settings.sampleSize * settings.trials;
     results.local_maximum_degree = max_degree;
     results.local_maximum_path = max_path;
     results.local_maximum_color = max_color;
+    results.local_color_count = max_color + 1;
     results.local_rounds = max_path + 2; // orientation round and first color round where |path| = 0
     results.avg_maximum_degree = max_degree / total_attempts;
     results.avg_maximum_path = max_path / total_attempts;
     results.avg_maximum_color = max_color / total_attempts;
+    results.avg_color_count = results.local_color_count / total_attempts;
     results.avg_rounds = results.local_rounds / total_attempts;
     results;
   }
@@ -219,6 +223,7 @@ object UnitTest {
     result.avg_maximum_degree = r1.avg_maximum_degree + r2.avg_maximum_degree;
     result.avg_maximum_path = r1.avg_maximum_path + r2.avg_maximum_path;
     result.avg_maximum_color = r1.avg_maximum_color + r2.avg_maximum_color;
+    result.avg_color_count = r1.avg_color_count + r2.avg_color_count;
     result.avg_rounds = r1.avg_rounds + r2.avg_rounds;
     result;
   }
@@ -228,10 +233,12 @@ object UnitTest {
     var jobj = ("local_maximum_degree", JDouble(results.local_maximum_degree)) ~ 
                ("local_maximum_path", JDouble(results.local_maximum_path)) ~
                ("local_maximum_color", JDouble(results.local_maximum_color)) ~
+               ("local_color_count", JDouble(results.local_color_count)) ~
                ("local_rounds", JDouble(results.local_rounds)) ~               
                ("avg_maximum_degree", JDouble(results.avg_maximum_degree)) ~
                ("avg_maximum_path", JDouble(results.avg_maximum_path)) ~
                ("avg_maximum_color", JDouble(results.avg_maximum_color)) ~
+               ("avg_color_count", JDouble(results.avg_color_count)) ~
                ("avg_rounds", JDouble(results.avg_rounds))
                
     jobj

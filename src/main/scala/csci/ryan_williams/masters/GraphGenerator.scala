@@ -15,6 +15,9 @@ import scala.collection.mutable._;
 import scala.util._;
 import scala.sys._;
 
+/**
+ * Generates a graph using the Erdos-Renyi method
+ */
 object GraphGenerator {
   
   val usage = """

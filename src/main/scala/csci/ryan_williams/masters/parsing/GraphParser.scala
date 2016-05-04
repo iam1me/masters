@@ -15,22 +15,7 @@ object GraphParser
 {
   implicit val formats = DefaultFormats
   
-  def parseVertex(sc: SparkContext, jsonData: String): (VertexId, JObject) =
-  {
-    var jobj = org.json4s.jackson.JsonMethods.parse(jsonData, true)
-                .asInstanceOf[JObject];
-    
-    var idField = (jobj \ "id")
-    idField match{
-      case x: JInt => {
-        return (x.num.toLong, jobj);
-      }
-      case _ => {
-        throw new Error(s"Failed to parse vertex from json: '$jsonData'");
-      }
-    }
-    
-  }
+
   
   def parse(sc: SparkContext, jsonData: String): Graph[JObject,JObject] = 
   {
