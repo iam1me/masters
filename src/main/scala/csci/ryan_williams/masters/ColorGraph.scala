@@ -21,7 +21,7 @@ import csci.ryan_williams.masters.coloring.distributed._
 object ColorGraph {
   
   val usage = """
-      ColorGraph [--source=/path/to/srcGraph] /path/to/destGraph
+      ColorGraph [--randomize-priority=true] [--source=/path/to/srcGraph] /path/to/destGraph
     """
   
   val ColorFieldName = "color";
@@ -30,6 +30,7 @@ object ColorGraph {
   class Settings {
     var sourcePath:String = null;
     var destPath = "./";
+    var randomizePriorities = false;
   }
   
   def main(args: Array[String]) =
@@ -45,7 +46,7 @@ object ColorGraph {
     var sc = new SparkContext(conf) 
         
     var graph = GraphUtilities.loadGraph(sc, settings.sourcePath);
-    var coloring = LDPO.apply(graph)
+    var coloring = LDPO.apply(graph, settings.randomizePriorities);
     
     var coloredGraph = apply(graph, coloring);
     
@@ -75,6 +76,19 @@ object ColorGraph {
       settingName match {
         case "source" => {
           result.sourcePath = settingValue;
+        }
+        case "randomize-priority" => {
+          if(settingValue.matches("(?i)^(true)|(t)|(1)|(y)|(yes)$"))
+          {
+            result.randomizePriorities = true;
+          }
+          else if(settingValue.matches("(?i)^(false)|(f)|(0)|(n)|(no)$"))
+          {
+            result.randomizePriorities = false;
+          }
+          else{
+            throw new Error(s"Invalid randomize-priority setting value: '$settingValue'")
+          }
         }
         case _ => {
           throw new Error("Unrecognized setting: " + settingName);

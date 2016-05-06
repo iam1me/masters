@@ -18,11 +18,13 @@ import csci.ryan_williams.masters.coloring.distributed._
 
 object UnitTest {
   val usage = """
-    UnitTest --graph-order=integer --graph-density=double --sample-size=integer --trials=integer path/for/results
+    UnitTest --graph-order=integer --graph-density=double --sample-size=integer 
+             --trials=integer [--randomize-priority=boolean] path/for/results
     """
   class Settings extends Serializable {
     var order = 0L;
     var density = .001D;
+    var randomizePriority = false;
     var sampleSize = 1;
     var trials = 1;
     var destPath = "./unit_test";
@@ -92,7 +94,19 @@ object UnitTest {
         case "trials" => {
           result.trials = settingValue.toInt;          
         }
-        
+        case "randomize-priority" => {
+          if(settingValue.matches("(?i)^(true)|(t)|(1)|(y)|(yes)$"))
+          {
+            result.randomizePriority = true;
+          }
+          else if(settingValue.matches("(?i)^(false)|(f)|(0)|(n)|(no)$"))
+          {
+            result.randomizePriority = false;
+          }
+          else{
+            throw new Error(s"Invalid randomize-priority setting value: '$settingValue'")
+          }
+        }
         case _ => {
           throw new Error("Unrecognized setting: " + settingName);
         }
@@ -121,6 +135,7 @@ object UnitTest {
     {
       var graph:Graph[JObject,JObject] = null
       println(s"UnitTest::apply - generating graph #$i of ${settings.sampleSize}")
+      if(settings.randomizePriority) println("randomizing priorities")
       try{
       graph = GraphUtilities.GenerateGraphWithDensity(sc, 
           settings.order, settings.density)
@@ -137,7 +152,7 @@ object UnitTest {
         println(s"UnitTest::apply - generating coloring #$j of ${settings.trials} for graph #$i");
         var coloring:VertexRDD[LDPO.ColoringState] = null
         try{
-          coloring = LDPO.apply(graph);
+          coloring = LDPO.apply(graph, settings.randomizePriority);
         }catch {
           case e : Throwable => {
             println(s"UnitTest::apply - an error occured while coloring graph #$i, iteration #$j")

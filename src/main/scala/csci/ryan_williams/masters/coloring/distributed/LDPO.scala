@@ -16,6 +16,8 @@ import scala.util.Sorting._
 
 import scala.reflect._
 
+import scala.util._;
+import scala.sys._;
 
 
 /*	LDPO.scala	
@@ -160,10 +162,18 @@ object LDPO
       {
         result = NeighborOrientation.PARENT;
       }
-      else
+      else if(neighborPriority > prevState.priority)
       {
         result = NeighborOrientation.CHILD;
       }
+      else if(prevState.id > neighborPriority)
+      {
+        result = NeighborOrientation.PARENT;
+      }
+      else {
+        result = NeighborOrientation.CHILD;
+      }
+      
       
       var ndx = getNeighborOrientationOffset(neighborId);
       if(ndx < 0)
@@ -282,7 +292,7 @@ object LDPO
 
   
   
-  def apply(graph: Graph[_,_]): VertexRDD[ColoringState] = 
+  def apply(graph: Graph[_,_], randomizePriorities: Boolean): VertexRDD[ColoringState] = 
   {    
     println("");
     
@@ -298,7 +308,9 @@ object LDPO
     var neighborIdRDD = graph.ops.collectNeighborIds(EdgeDirection.Either)    
     
     var stateRDD = neighborIdRDD.map(v => {
-      (v._1, new ColoringState(v._1, v._1.toInt, v._2, -1, null, null, 0))
+      var priority = if(randomizePriorities) Random.nextLong() else v._1.toLong;
+      
+      (v._1, new ColoringState(v._1, priority, v._2, -1, null, null, 0))
     })
     
     var colorGraph = Graph(stateRDD, graph.edges);
@@ -310,32 +322,6 @@ object LDPO
         initialMessage, Integer.MAX_VALUE, EdgeDirection.Either)(
         vectorProgram,sendMessage, mergeMessages )
             
-    /*    
-    println("\n*** RESULTS ***")
-        
-    results.vertices.collect().map(vdata => {
-      var parents = "";
-      var children = "";      
-      for(curId <- vdata._2.neighborIds)
-      {
-        var orientation = vdata._2.neighborOrientations.find(_._1 == curId).get;
-        orientation._2 match{
-          case NeighborOrientation.CHILD =>
-            children += curId + ",";
-          
-          case NeighborOrientation.PARENT =>
-            parents += curId + ",";
-          
-          case _ =>
-            throw new Error(s"Unknown orientation for $curId in ${vdata._1}")
-        }
-      }
-      println(s"Vertex ID: ${vdata._1}, Color: ${vdata._2.color}, Degree: ${vdata._2.neighborIds.length}, "
-        + s"Path Length: ${vdata._2.pathLength}, Parents: {$parents}, Children: {$children}");
-    })
-        
-    println("*** COMPLETE ***")
-    */
     
     return results.vertices;
   }
