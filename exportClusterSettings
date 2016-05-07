@@ -7,5 +7,5 @@ export AWS_SECRET_ACCESS_KEY=aBhxEtbzfYUq5Ezj8LfNOHHR00Dj//HQaZbnp+dn
 export AWS_CLUSTER_NAME=masters-cluster
 export AWS_SLAVES=15
 export AWS_REGION=us-west-1
-export AWS_INSTANCE_TYPE=m3.2xlarge
+export AWS_INSTANCE_TYPE=t2.large
 
