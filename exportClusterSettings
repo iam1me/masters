@@ -1,8 +1,8 @@
-export AWS_KEY_PAIR=mastersInstance
-export AWS_IDENTITY_FILE=mastersInstance.pem
+export AWS_KEY_PAIR=nameOfKeyPair
+export AWS_IDENTITY_FILE=keyPairIdentityFile.pem
 
-export AWS_ACCESS_KEY_ID=AKIAJSRAMOURO3F7NU6A
-export AWS_SECRET_ACCESS_KEY=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
+export AWS_ACCESS_KEY_ID=AccessKeyIdFromAmazon
+export AWS_SECRET_ACCESS_KEY=SecretAccessKeyFromAmazon
 
 export AWS_CLUSTER_NAME=masters-cluster
 export AWS_SLAVES=15
